@@ -1,123 +1,350 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final isFirstRun = prefs.getBool('isFirstRun') ?? true;
+  runApp(MyApp(isFirstRun: isFirstRun));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool isFirstRun;
+  const MyApp({super.key, required this.isFirstRun});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppSettings()),
+        ChangeNotifierProvider(create: (_) => GameLauncher()),
+      ],
+      child: MaterialApp(
+        title: 'MC Java Launcher',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          primarySwatch: Colors.green,
+          fontFamily: 'Roboto',
+        ),
+        initialRoute: isFirstRun ? '/install' : '/home',
+        routes: {
+          '/': (context) => const HomeScreen(),
+          '/home': (context) => const HomeScreen(),
+          '/install': (context) => const InstallScreen(),
+          '/settings': (context) => const SettingsScreen(),
+          '/login': (context) => const LoginScreen(),
+        },
+        localizationsDelegates: const [
+          // Add localization delegates for Korean and English
+        ],
+        supportedLocales: const [
+          Locale('en', ''),
+          Locale('ko', ''),
+        ],
+        locale: const Locale('ko', ''), // Default to Korean
       ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const MyHomePage(title: 'Flutter Demo Home Page'),
-      },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class AppSettings extends ChangeNotifier {
+  String _language = 'ko';
+  int _memory = 1024;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  String get language => _language;
+  int get memory => _memory;
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  void setLanguage(String lang) {
+    _language = lang;
+    notifyListeners();
+  }
 
-  final String title;
+  void setMemory(int mem) {
+    _memory = mem;
+    notifyListeners();
+  }
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Future<void> saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language', _language);
+    await prefs.setInt('memory', _memory);
+  }
+
+  Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _language = prefs.getString('language') ?? 'ko';
+    _memory = prefs.getInt('memory') ?? 1024;
+    notifyListeners();
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class GameLauncher extends ChangeNotifier {
+  bool _isLoggedIn = false;
+  String _offlineNickname = 'tester_12345';
+  List<String> _supportedVersions = [
+    '1.21',
+    '1.21.1',
+    '1.21.10',
+    '1.0',
+    '1.19',
+    '1.19.1',
+    '1.16.5',
+    '1.16'
+  ];
+  String? _selectedVersion;
+  bool _isInstalling = false;
+  double _installProgress = 0.0;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  bool get isLoggedIn => _isLoggedIn;
+  String get offlineNickname => _offlineNickname;
+  List<String> get supportedVersions => _supportedVersions;
+  String? get selectedVersion => _selectedVersion;
+  bool get isInstalling => _isInstalling;
+  double get installProgress => _installProgress;
+
+  void selectVersion(String version) {
+    _selectedVersion = version;
+    notifyListeners();
+  }
+
+  void login() {
+    _isLoggedIn = true;
+    notifyListeners();
+  }
+
+  void logout() {
+    _isLoggedIn = false;
+    notifyListeners();
+  }
+
+  Future<void> installVersions() async {
+    _isInstalling = true;
+    _installProgress = 0.0;
+    notifyListeners();
+
+    // Simulate installation process
+    for (int i = 0; i < _supportedVersions.length; i++) {
+      await Future.delayed(const Duration(seconds: 10)); // Simulate download time
+      _installProgress = (i + 1) / _supportedVersions.length;
+      notifyListeners();
+    }
+
+    _isInstalling = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isFirstRun', false);
+    notifyListeners();
+  }
+
+  Future<void> launchGame() async {
+    // Placeholder for launching Minecraft
+    // In real implementation, this would use PojavLauncher or similar
+    print('Launching Minecraft version: $_selectedVersion');
+  }
+
+  Future<void> openGameFiles() async {
+    final directory = await getExternalStorageDirectory();
+    final gameDir = Directory('${directory!.path}/.minecraft');
+    if (!await gameDir.exists()) {
+      await gameDir.create(recursive: true);
+    }
+    // Use url_launcher to open file manager
+    final uri = Uri.parse('file://${gameDir.path}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+}
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final launcher = Provider.of<GameLauncher>(context);
+    final settings = Provider.of<AppSettings>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('MC Java Launcher'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.login),
+            onPressed: () => Navigator.pushNamed(context, '/login'),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('지원 버전:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: ListView.builder(
+                itemCount: launcher.supportedVersions.length,
+                itemBuilder: (context, index) {
+                  final version = launcher.supportedVersions[index];
+                  return ListTile(
+                    title: Text(version),
+                    leading: Radio<String>(
+                      value: version,
+                      groupValue: launcher.selectedVersion,
+                      onChanged: (value) => launcher.selectVersion(value!),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: launcher.selectedVersion != null ? () => launcher.launchGame() : null,
+              child: const Text('게임 실행'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => launcher.openGameFiles(),
+              child: const Text('게임 파일 열기'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class InstallScreen extends StatefulWidget {
+  const InstallScreen({super.key});
+
+  @override
+  State<InstallScreen> createState() => _InstallScreenState();
+}
+
+class _InstallScreenState extends State<InstallScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<GameLauncher>(context, listen: false).installVersions().then((_) {
+        Navigator.pushReplacementNamed(context, '/home');
+      });
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final launcher = Provider.of<GameLauncher>(context);
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text('$_counter', style: Theme.of(context).textTheme.headlineMedium),
+          children: [
+            const Text('게임 버전 설치 중...', style: TextStyle(fontSize: 24)),
+            const SizedBox(height: 20),
+            CircularProgressIndicator(value: launcher.installProgress),
+            const SizedBox(height: 20),
+            Text('${(launcher.installProgress * 100).toStringAsFixed(0)}% 완료'),
+            const SizedBox(height: 20),
+            const Text('인터넷 연결이 필요하며, 약 5-15분 소요됩니다.'),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+}
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<AppSettings>(context);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('설정')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('언어:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            DropdownButton<String>(
+              value: settings.language,
+              items: const [
+                DropdownMenuItem(value: 'ko', child: Text('한국어')),
+                DropdownMenuItem(value: 'en', child: Text('English')),
+              ],
+              onChanged: (value) => settings.setLanguage(value!),
+            ),
+            const SizedBox(height: 20),
+            const Text('메모리 (MB):', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Slider(
+              value: settings.memory.toDouble(),
+              min: 512,
+              max: 4096,
+              divisions: 7,
+              label: '${settings.memory} MB',
+              onChanged: (value) => settings.setMemory(value.toInt()),
+            ),
+            Text('${settings.memory} MB'),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => settings.saveSettings(),
+              child: const Text('설정 저장'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final launcher = Provider.of<GameLauncher>(context);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('로그인')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (!launcher.isLoggedIn) ...[
+              const Text('마인크래프트 정품 계정으로 로그인하세요.'),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => launcher.login(), // Placeholder for real login
+                child: const Text('Microsoft 로그인'),
+              ),
+            ] else ...[
+              const Text('로그인됨'),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => launcher.logout(),
+                child: const Text('로그아웃'),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Text('오프라인 닉네임: ${launcher.offlineNickname}'),
+          ],
+        ),
+      ),
     );
   }
 }

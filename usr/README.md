@@ -1,16 +1,19 @@
-# couldai_user_app
+# MC Java Launcher
 
-A new Flutter project.
+Minecraft Java Edition Launcher for Android with support for specific versions.
 
-## Getting Started
+## Features
 
-This project is a starting point for a Flutter application.
+- Supports Android 10 (API 29) and above
+- Languages: Korean and English (configurable in settings)
+- Supported Minecraft versions: 1.21, 1.21.1, 1.21.10, 1.0 (Alpha 1.0.0), 1.19, 1.19.1, 1.16.5, 1.16
+- Automatic installation of all supported versions on first run
+- Play modes: Singleplayer only without login, Single + Multiplayer with Microsoft account
+- Memory settings in MB (default 1024MB)
+- Game UI: Touch controls compatible with PojavLauncher
+- Additional features: Resource packs, mods (Forge/Fabric), maps, shaders
+- Main screen button: "게임 파일 열기" to open .minecraft folder
 
-A few resources to get you started if this is your first Flutter project:
+## Note
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+This is a Flutter UI implementation. Actual Minecraft launching requires integration with PojavLauncher or similar native code for JVM execution on Android.
